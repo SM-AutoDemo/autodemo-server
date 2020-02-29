@@ -10,6 +10,12 @@
 #pragma newdecls required
 #pragma tabsize 4
 
+#define SPPP_COMPILER 0
+
+#if !SPPP_COMPILER
+	#define decl static
+#endif
+
 // autodemo.sp
 public Plugin myinfo =
 { 
