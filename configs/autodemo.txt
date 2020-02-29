@@ -1,0 +1,9 @@
+"AutoDemo"
+{
+	// Путь до PHP скрипта скрипта по URL(у).
+	// The path to the PHP script via the URL.
+	"web_site"		"https://your-url.com/demos/"
+
+	// WEB API Key.
+	"web_key"		"Privet_Wend4r"
+}
