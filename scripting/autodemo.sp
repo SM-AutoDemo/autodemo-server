@@ -21,8 +21,8 @@ public Plugin myinfo =
 { 
 	name = "[Auto Demo] Core",
 	author = "Wend4r",
-	description = "Record and upload SourceTV demos.",
-	version = "1.0.0 Alpha",
+	description = "Record and upload SourceTV demos",
+	version = "1.0.1 Alpha",
 	url = "Discord: Wend4r#0001 | VK: vk.com/wend4r"
 };
 
@@ -81,18 +81,18 @@ public void OnPluginStart()
 
 	RegAdminCmd("sm_autodemo_reload", ConfigReload, ADMFLAG_CONFIG);
 
-	HookEvent("game_end", OnGameEnd, EventHookMode_Pre);
-	HookEvent("bomb_planted", OnBombEvents);
-	HookEvent("bomb_exploded", OnBombEvents);
-	HookEvent("bomb_defused", OnBombEvents);
-	HookEvent("begin_new_match", OnMatchEvents, EventHookMode_PostNoCopy);
-	HookEvent("cs_intermission", OnMatchEvents, EventHookMode_PostNoCopy);
-	HookEvent("cs_match_end_restart", OnMatchEvents, EventHookMode_PostNoCopy);
+	HookEventEx("bomb_planted", OnBombEvents);
+	HookEventEx("bomb_exploded", OnBombEvents);
+	HookEventEx("bomb_defused", OnBombEvents);
+	HookEventEx("begin_new_match", OnMatchEvents, EventHookMode_PostNoCopy);
+	HookEventEx("cs_intermission", OnMatchEvents, EventHookMode_PostNoCopy);
+	HookEventEx("cs_match_end_restart", OnMatchEvents, EventHookMode_PostNoCopy);
 	HookEvent("round_start", OnMatchEvents, EventHookMode_Pre);
 	HookEvent("round_end", OnRoundEnd);
 	HookEvent("player_death", OnPlayerDeath);
 	HookEvent("player_team", OnPlayerTeam, EventHookMode_Pre);
 	HookEvent("player_say", OnPlayerSay);
+	HookEvent("game_end", OnGameEnd, EventHookMode_Pre);
 
 	static char sSteamID[32];
 
@@ -110,83 +110,80 @@ public void OnPluginStart()
 
 public void OnConfigsExecuted()
 {
-	if(GetFeatureStatus(FeatureType_Native, "SteamWorks_GetPublicIPCell"))
+	decl char sCurrentMap[128];
+
+	GetCurrentMapEx(sCurrentMap, sizeof(sCurrentMap));
+	SendHTTPQuery("map_start", 160, _, "\"name\": \"%s\"", sCurrentMap);
+
+	FileType iFileType;
+
+	decl char sFileName[PLATFORM_MAX_PATH],
+			  sNewDirectory[PLATFORM_MAX_PATH];
+
+	static ArrayList hDemos;
+
+	DirectoryListing hDirectory;
+
+	if(!g_sDemoPath[0])
 	{
-		static char sCurrentMap[128];
+		BuildPath(Path_SM, g_sDemoPath, sizeof(g_sDemoPath), "data/demos/");
 
-		GetCurrentMapEx(sCurrentMap, sizeof(sCurrentMap));
-		SendHTTPQuery("map_start", 160, _, "\"name\": \"%s\"", sCurrentMap);
-
-		FileType	iFileType;
-
-		static char sFileName[PLATFORM_MAX_PATH],
-					sNewDirectory[PLATFORM_MAX_PATH];
-
-		static ArrayList hDemos;
-
-		DirectoryListing hDirectory;
-
-		if(!g_sDemoPath[0])
+		if(!DirExists(g_sDemoPath))
 		{
-			BuildPath(Path_SM, g_sDemoPath, sizeof(g_sDemoPath), "data/demos/");
-
-			if(!DirExists(g_sDemoPath))
-			{
-				CreateDirectory(g_sDemoPath, FPERM_O_READ | FPERM_O_EXEC | FPERM_G_EXEC | FPERM_G_READ | FPERM_U_EXEC | FPERM_U_WRITE | FPERM_U_READ);
-			}
+			CreateDirectory(g_sDemoPath, FPERM_O_READ | FPERM_U_WRITE | FPERM_O_EXEC | FPERM_G_EXEC | FPERM_G_READ | FPERM_U_EXEC | FPERM_U_READ);
 		}
-
-		if(!hDemos)
-		{
-			hDemos = new ArrayList(PLATFORM_MAX_PATH / 4 + 1);
-		}
-		else
-		{
-			hDemos.Clear();
-		}
-
-		hDirectory = OpenDirectory(g_sDemoPath);
-
-		while(hDirectory.GetNext(sFileName, sizeof(sFileName), iFileType))
-		{
-			if(iFileType == FileType_File)
-			{
-				hDemos.PushString(sFileName);
-			}
-		}
-
-		int iLength = hDemos.Length;
-
-		if(iLength)
-		{
-			char[] sDemoFiles = new char[iLength * PLATFORM_MAX_PATH];
-
-			for(int i = 0; i != iLength; i++)
-			{
-				hDemos.GetString(i, sFileName, sizeof(sFileName));
-				FormatEx(sDemoFiles[strlen(sDemoFiles)], PLATFORM_MAX_PATH, "\"%s\", ", sFileName);
-			}
-
-			sDemoFiles[strlen(sDemoFiles) - 2] = '\0';
-
-			SendHTTPQuery("demo_unload", strlen(sDemoFiles) + 64, _, "\"time_limit\": %i, \"files\": [%s]", iLength * 360, sDemoFiles);
-
-		}
-
-		hDirectory.Close();
-		hDirectory = OpenDirectory("/");
-
-		while(hDirectory.GetNext(sFileName, sizeof(sFileName), iFileType))
-		{
-			if(iFileType == FileType_File && !strncmp(sFileName, "auto", 4) && '0' <= (sFileName[4] & 0xFF) <= '9')
-			{
-				FormatEx(sNewDirectory, sizeof(sNewDirectory), "%sauto%c-%i-%i-%s-%s.dem", g_sDemoPath, sFileName[4], GetFileTime(sFileName, FileTime_LastChange), SteamWorks_GetPublicIPCell(), g_sPort, sCurrentMap);
-				RenameFile(sNewDirectory, sFileName);
-			}
-		}
-
-		hDirectory.Close();
 	}
+
+	if(!hDemos)
+	{
+		hDemos = new ArrayList(PLATFORM_MAX_PATH / 4 + 1);
+	}
+	else
+	{
+		hDemos.Clear();
+	}
+
+	hDirectory = OpenDirectory(g_sDemoPath);
+
+	while(hDirectory.GetNext(sFileName, sizeof(sFileName), iFileType))
+	{
+		if(iFileType == FileType_File)
+		{
+			hDemos.PushString(sFileName);
+		}
+	}
+
+	int iLength = hDemos.Length;
+
+	if(iLength)
+	{
+		char[] sDemoFiles = new char[iLength * PLATFORM_MAX_PATH];
+
+		for(int i = 0; i != iLength; i++)
+		{
+			hDemos.GetString(i, sFileName, sizeof(sFileName));
+			FormatEx(sDemoFiles[strlen(sDemoFiles)], PLATFORM_MAX_PATH, "\"%s\", ", sFileName);
+		}
+
+		sDemoFiles[strlen(sDemoFiles) - 2] = '\0';
+
+		SendHTTPQuery("demo_unload", strlen(sDemoFiles) + 64, _, "\"time_limit\": %i, \"files\": [%s]", iLength * 360, sDemoFiles);
+	}
+
+	hDirectory.Close();
+	hDirectory = OpenDirectory("/");
+
+	while(hDirectory.GetNext(sFileName, sizeof(sFileName), iFileType))
+	{
+		if(iFileType == FileType_File && !strncmp(sFileName, "auto", 4) && '0' <= (sFileName[4] & 0xFF) <= '9')
+		{
+			FormatEx(sNewDirectory, sizeof(sNewDirectory), "%sauto%c-%i-%i-%s-%s.dem", g_sDemoPath, sFileName[4], GetFileTime(sFileName, FileTime_LastChange), SteamWorks_GetPublicIPCell(), g_sPort, sCurrentMap);
+			RenameFile(sNewDirectory, sFileName);
+			SetFilePermissions(sNewDirectory, FPERM_O_READ | FPERM_U_WRITE | FPERM_O_EXEC | FPERM_G_EXEC | FPERM_G_READ | FPERM_U_EXEC | FPERM_U_READ);
+		}
+	}
+
+	hDirectory.Close();
 }
 
 void LoadSettings()
@@ -223,21 +220,26 @@ Action ConfigReload(int iClient, int iArgs)
 
 void GetCurrentMapEx(char[] sMapBuffer, int iSize)
 {
-	decl char sBuffer[256];
+	GetCurrentMap(sMapBuffer, iSize);
+	GetMapDisplayName(sMapBuffer, sMapBuffer, iSize);
+}
 
-	GetCurrentMap(sBuffer, sizeof(sBuffer));
+char[] GetShieldingNamePlayer(int iClient)
+{
+	char sName[65];
 
-	int iIndex = -1, iLen = strlen(sBuffer);
-	
-	for(int i = 0; i != iLen; i++)
+	GetClientName(iClient, sName, 32);
+
+	for(int i = 0, iLen = strlen(sName); i < iLen; i++)
 	{
-		if(sBuffer[i] == '/' || sBuffer[i] == '\\')
+		if(sName[i] == '"' || sName[i] == '\\')
 		{
-			iIndex = i;
+			Format(sName[i], ++iLen - i + 1, "\\%s", sName[i]);
+			i++;
 		}
 	}
 
-	strcopy(sMapBuffer, iSize, sBuffer[iIndex + 1]);
+	return sName;
 }
 
 void OnBombEvents(Event hEvent, const char[] sName, bool bBroadcastDisabled)
@@ -246,7 +248,7 @@ void OnBombEvents(Event hEvent, const char[] sName, bool bBroadcastDisabled)
 
 	if(iClient)
 	{
-		SendHTTPQuery(sName, 128, _, "\"player\": {\"name\": \"%N\", \"accounid\": %i}", iClient, g_iAccountID[GetClientOfUserId(hEvent.GetInt("userid"))]);
+		SendHTTPQuery(sName, 128, _, "\"player\": {\"name\": \"%s\", \"accounid\": %i}", GetShieldingNamePlayer(iClient), g_iAccountID[iClient]);
 	}
 }
 
@@ -279,13 +281,9 @@ void OnPlayerDeath(Event hEvent, const char[] sName, bool bBroadcastDisabled)
 
 	if(iAttacker && iClient)
 	{
-		static float flAttackerOrigin[3],
-					 flClientOrigin[3],
-					 flAttackerRotation[3],
-					 flClientRotation[3];
+		decl float flAttackerOrigin[3], flClientOrigin[3], flAttackerRotation[3], flClientRotation[3];
 
-		static char  sWeapon[32],
-					 sItemID[128];
+		decl char sWeapon[32], sItemID[128];
 
 		hEvent.GetString("weapon", sWeapon, sizeof(sWeapon));
 		hEvent.GetString("weapon_itemid", sItemID, sizeof(sItemID));
@@ -296,7 +294,7 @@ void OnPlayerDeath(Event hEvent, const char[] sName, bool bBroadcastDisabled)
 		GetEntDataVector(iAttacker, m_angRotation, flAttackerRotation);
 		GetEntDataVector(iClient, m_angRotation, flClientRotation);
 
-		SendHTTPQuery(sName, 512, _, "\"attacker\": {\"name\": \"%N\", \"accounid\": %i, \"team\": %i, \"rotation\": \"%f\", \"origin\": {\"x\": \"%f\", \"y\": \"%f\", \"z\": \"%f\"}}, \"assister\": {\"name\": \"%N\", \"accounid\": %i, \"team\": %i}, \"assistedflash\": %i, \"weapon\": \"%s\", \"weapon_itemid\": %s, \"headshot\": %i, \"penetrated\": %i, \"victim\": {\"name\": \"%N\", \"accounid\": %i, \"team\": %i, \"rotation\": \"%f\", \"origin\": {\"x\": \"%f\", \"y\": \"%f\", \"z\": \"%f\"}}", iAttacker, g_iAccountID[iAttacker], GetClientTeam(iAttacker), flAttackerRotation[1], flAttackerOrigin[0], flAttackerOrigin[1], flAttackerOrigin[2], iAssister, g_iAccountID[iAssister], iAssister ? GetClientTeam(iAssister) : 0, hEvent.GetBool("assistedflash"), sWeapon, sItemID[0] == '\0' ? "0" : sItemID, hEvent.GetBool("headshot"), hEvent.GetBool("penetrated"), iClient, g_iAccountID[iClient], GetClientTeam(iClient), flAttackerRotation[1], flClientOrigin[0], flClientOrigin[1], flClientOrigin[2]);
+		SendHTTPQuery(sName, 512, _, "\"attacker\": {\"name\": \"%s\", \"accounid\": %i, \"team\": %i, \"rotation\": \"%f\", \"origin\": {\"x\": \"%f\", \"y\": \"%f\", \"z\": \"%f\"}}, \"assister\": {\"name\": \"%s\", \"accounid\": %i, \"team\": %i}, \"assistedflash\": %i, \"weapon\": \"%s\", \"weapon_itemid\": %s, \"headshot\": %i, \"penetrated\": %i, \"victim\": {\"name\": \"%s\", \"accounid\": %i, \"team\": %i, \"rotation\": \"%f\", \"origin\": {\"x\": \"%f\", \"y\": \"%f\", \"z\": \"%f\"}}", GetShieldingNamePlayer(iAttacker), g_iAccountID[iAttacker], GetClientTeam(iAttacker), flAttackerRotation[1], flAttackerOrigin[0], flAttackerOrigin[1], flAttackerOrigin[2], GetShieldingNamePlayer(iAssister), g_iAccountID[iAssister], iAssister ? GetClientTeam(iAssister) : 0, hEvent.GetBool("assistedflash"), sWeapon, sItemID[0] == '\0' ? "0" : sItemID, hEvent.GetBool("headshot"), hEvent.GetBool("penetrated"), GetShieldingNamePlayer(iClient), g_iAccountID[iClient], GetClientTeam(iClient), flAttackerRotation[1], flClientOrigin[0], flClientOrigin[1], flClientOrigin[2]);
 	}
 }
 
@@ -306,7 +304,7 @@ void OnPlayerTeam(Event hEvent, const char[] sName, bool bBroadcastDisabled)
 
 	if(iClient)
 	{
-		SendHTTPQuery(sName, 512, _, "\"player\": {\"name\": \"%N\", \"accounid\": %i}, \"disconnect\": %i, \"oldteam\": %i, \"team\": %i, \"autobalance\": %i", iClient, g_iAccountID[iClient], hEvent.GetInt("disconnect"), hEvent.GetInt("oldteam"), hEvent.GetInt("team"), hEvent.GetInt("autoteam"));
+		SendHTTPQuery(sName, 512, _, "\"player\": {\"name\": \"%s\", \"accounid\": %i}, \"disconnect\": %i, \"oldteam\": %i, \"team\": %i, \"autobalance\": %i", GetShieldingNamePlayer(iClient), g_iAccountID[iClient], hEvent.GetInt("disconnect"), hEvent.GetInt("oldteam"), hEvent.GetInt("team"), hEvent.GetInt("autoteam"));
 	}
 }
 
@@ -316,10 +314,10 @@ void OnPlayerSay(Event hEvent, const char[] sName, bool bBroadcastDisabled)
 
 	if(iClient)
 	{
-		static char sMessage[254];
+		decl char sMessage[256];
 
 		hEvent.GetString("text", sMessage, sizeof(sMessage));
-		SendHTTPQuery(sName, 512, _, "\"player\": {\"name\": \"%N\", \"accounid\": %i, \"isalive\": %i, \"team\": %i}, \"message\": \"%s\"", iClient, g_iAccountID[iClient], IsPlayerAlive(iClient), GetClientTeam(iClient), sMessage);
+		SendHTTPQuery(sName, 512, _, "\"player\": {\"name\": \"%s\", \"accounid\": %i, \"isalive\": %i, \"team\": %i}, \"message\": \"%s\"", GetShieldingNamePlayer(iClient), g_iAccountID[iClient], IsPlayerAlive(iClient), GetClientTeam(iClient), sMessage);
 	}
 }
 
